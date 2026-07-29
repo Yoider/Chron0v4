@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  traceLogs    TraceLog[]
+  documents    Document[]
+  goals        Goal[]
+  tasks        Task[]
+  transactions Transaction[]
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String?       // Nullable for OAuth users
+  name         String?
+  image        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  projects     Project[]
+  accounts     Account[]
+  transactions Transaction[]
+  wallets      Wallet[]
+  deposits     Deposit[]
+  transfers    Transfer[]
+}
+
+model Account {
+  id                String   @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+}
+
+model Wallet {
+  id            String        @id @default(uuid())
+  name          String
+  icon          String?       // Emoji representing the wallet, e.g. "💳"
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  fromTransfers Transfer[]    @relation("fromWallet")
+  toTransfers   Transfer[]    @relation("toWallet")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  walletId    String?
+  wallet      Wallet?  @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  depositId   String?
+  deposit     Deposit? @relation(fields: [depositId], references: [id], onDelete: SetNull)
+  amount      Float
+  type        String   // "INCOME" or "EXPENSE"
+  category    String   // e.g. "Desarrollo", "Hosting", "Marketing", "Sueldo", "Licencias", etc.
+  icon        String?       // Emoji representing the transaction
+  recurrence  String?  // e.g. "SUBSCRIPTION", "RECURRING", "BILL", "ONE_TIME"
+  status      String?  @default("PAID") // "PAID" or "PENDING"
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TraceLog {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lastState String
+  nextSteps String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Document {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  type      String   // "EXPLANATION", "REFERENCE", "GUIDE"
+  content   String   // Markdown content
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Goal {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  progress    Float    @default(0.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+}
+
+model Task {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title     String
+  status    String   // "PENDING", "IN_PROGRESS", "BLOCKED", "COMPLETED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Deposit {
+  id            String        @id @default(uuid())
+  name          String
+  icon          String?       // Emoji, e.g. "🍔"
+  color         String        @default("purple") // Theme color: yellow, purple, green, blue, red
+  allocated     Float         @default(0.0)
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  fromTransfers Transfer[]    @relation("fromDeposit")
+  toTransfers   Transfer[]    @relation("toDeposit")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Transfer {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount        Float
+  description   String?
+  date          DateTime     @default(now())
+  
+  // Source
+  fromWalletId  String?
+  fromWallet    Wallet?      @relation("fromWallet", fields: [fromWalletId], references: [id], onDelete: SetNull)
+  fromDepositId String?
+  fromDeposit   Deposit?     @relation("fromDeposit", fields: [fromDepositId], references: [id], onDelete: SetNull)
+  fromPozo      Boolean      @default(false)
+  
+  // Target
+  toWalletId    String?
+  toWallet      Wallet?      @relation("toWallet", fields: [toWalletId], references: [id], onDelete: SetNull)
+  toDepositId   String?
+  toDeposit     Deposit?     @relation("toDeposit", fields: [toDepositId], references: [id], onDelete: SetNull)
+  toPozo        Boolean      @default(false)
+  
+  createdAt     DateTime     @default(now())
+}
